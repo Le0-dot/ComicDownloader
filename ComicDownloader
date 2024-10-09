@@ -1,0 +1,79 @@
+import re
+import io
+import requests
+from bs4 import BeautifulSoup
+from PIL import Image
+from zipfile import ZipFile
+from dataclasses import dataclass
+from argparse import ArgumentParser
+from pathlib import Path
+
+
+@dataclass
+class Img:
+    filename: str
+    url: str
+
+    def __post_init__(self):
+        if (m := re.search(r"(\d+)", self.filename)) is None:
+            raise ValueError("No number in id")
+        self.filename = f"{int(m.group(0)) + 1:03}.jpg"
+        self.url = self.url.strip()
+
+    def download_jpeg(self) -> bytes:
+        r = requests.get(self.url, stream=True)
+        image = Image.open(io.BytesIO(r.content))
+        buffer = io.BytesIO()
+        image.save(buffer, format="jpeg")
+        return buffer.getvalue()
+
+
+def find_images(url: str) -> [Img]:
+    soup = BeautifulSoup(requests.get(url).text, "html.parser")
+    images = soup.find_all("img")
+    return [Img(image.get("id"), image.get("data-src")) for image in images]
+
+
+def create_cbz(name: str, imgs: [Img]):
+    with ZipFile(name, "w") as archive:
+        for img in imgs:
+            archive.writestr(img.filename, img.download_jpeg())
+
+
+def main():
+    parser = ArgumentParser(
+        prog="ComicDownloader",
+        description="Given an URL to a website with images, download and create cbz file from them.",
+        usage="python %(prog)s [options] URL",
+    )
+    parser.add_argument("URL", help="url with images to download")
+    parser.add_argument(
+        "-o",
+        "--output",
+        nargs="?",
+        help="name of output file (default: filename in url)",
+    )
+    parser.add_argument(
+        "-d",
+        "--directory",
+        nargs="?",
+        default=".",
+        type=Path,
+        help="directory to put output file into (default: .)",
+    )
+
+    args = parser.parse_args()
+
+    if args.output is None:
+        args.output = f"{Path(args.URL).name}.cbz"
+
+    if not args.directory.exists():
+        args.directory.mkdir()
+    if not args.directory.is_dir():
+        raise ValueError(f"{args.directory} is not a directory")
+
+    imgs = find_images(args.URL)
+    create_cbz(args.directory / args.output, imgs)
+
+
+main()
