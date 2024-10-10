@@ -28,30 +28,35 @@ class Img:
         return buffer.getvalue()
 
 
+@dataclass
+class Archive:
+    filename: str
+    imgs: [Img]
+
+    def save(self, directory: Path):
+        with ZipFile(directory / self.filename, "w") as archive:
+            for img in self.imgs:
+                archive.writestr(img.filename, img.download_jpeg())
+
+
 def find_images(url: str) -> [Img]:
     soup = BeautifulSoup(requests.get(url).text, "html.parser")
     images = soup.find_all("img")
     return [Img(image.get("id"), image.get("data-src")) for image in images]
 
 
-def create_cbz(name: str, imgs: [Img]):
-    with ZipFile(name, "w") as archive:
-        for img in imgs:
-            archive.writestr(img.filename, img.download_jpeg())
-
-
 def main():
     parser = ArgumentParser(
         prog="ComicDownloader",
         description="Given an URL to a website with images, download and create cbz file from them.",
-        usage="python %(prog)s [options] URL",
     )
-    parser.add_argument("URL", help="url with images to download")
+
+    parser.add_argument("URLs", nargs='+', help="urls with images to download")
     parser.add_argument(
         "-o",
         "--output",
         nargs="?",
-        help="name of output file (default: filename in url)",
+        help="name of output file, could only be specified with url (default: filename in url)",
     )
     parser.add_argument(
         "-d",
@@ -64,16 +69,23 @@ def main():
 
     args = parser.parse_args()
 
-    if args.output is None:
-        args.output = f"{Path(args.URL).name}.cbz"
+    match (args.URLs, args.output):
+        case (_, None):
+            output = [f"{Path(url).name}.cbz" for url in args.URLs]
+        case (urls, filename) if len(urls) > 1:
+            parser.exit(message="Specifying output with multiple URLs is not supported\n")
+        case (_, filename):
+            output = filename
 
     if not args.directory.exists():
         args.directory.mkdir()
     if not args.directory.is_dir():
-        raise ValueError(f"{args.directory} is not a directory")
+        parser.exit(status=1, message=f"{args.directory} is not a directory")
 
-    imgs = find_images(args.URL)
-    create_cbz(args.directory / args.output, imgs)
+    for url, filename in zip(args.URLs, output):
+        archive = Archive(filename, find_images(url))
+        archive.save(args.directory)
 
 
-main()
+if __name__ == "__main__":
+    main()
