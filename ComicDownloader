@@ -31,7 +31,7 @@ class Img:
 @dataclass
 class Archive:
     filename: str
-    imgs: [Img]
+    imgs: list[Img]
 
     def save(self, directory: Path):
         with ZipFile(directory / self.filename, "w") as archive:
@@ -45,18 +45,35 @@ def find_images(url: str) -> [Img]:
     return [Img(image.get("id"), image.get("data-src")) for image in images]
 
 
+def sequential_search(data: str, regexs: list[str]) -> str | None:
+    for regex in regexs:
+        if (match := re.search(regex, data)) is None:
+            return None
+        data = match.group(1)
+    return data
+
+
+def get_name(url: str, regexs: list[str], padding: int | None) -> str:
+    if (name := sequential_search(url, regexs)) is None:
+        raise ValueError(f"Regular Expression for name did not match for {url!r}")
+    if padding:
+        return f"{name:0>{padding}}.cbz"
+    return name
+
+
 def main():
     parser = ArgumentParser(
         prog="ComicDownloader",
-        description="Given an URL to a website with images, download and create cbz file from them.",
+        description="Given an URLs to a website with images, download and create cbz file from them.",
     )
 
     parser.add_argument("URLs", nargs='+', help="urls with images to download")
     parser.add_argument(
-        "-o",
-        "--output",
+        "-u",
+        "--url-name",
         nargs="?",
-        help="name of output file, could only be specified with url (default: filename in url)",
+        default=r"^.+/([^/]+)/?$",
+        help="a python regular expression with 1 capture group, that will be used to get filename for archive (default: filename in url)"
     )
     parser.add_argument(
         "-d",
@@ -66,24 +83,34 @@ def main():
         type=Path,
         help="directory to put output file into (default: .)",
     )
+    parser.add_argument(
+        "-p",
+        "--padding",
+        nargs="?",
+        const=3,
+        type=int,
+        help="treat filename extracted with --url-name as a number and pad it to specified length (default length: 3)"
+    )
+    parser.add_argument(
+        "-n",
+        "--number",
+        action="store_true",
+        help="find a number in name extracted by --url-name and use it"
+    )
 
     args = parser.parse_args()
-
-    match (args.URLs, args.output):
-        case (_, None):
-            output = [f"{Path(url).name}.cbz" for url in args.URLs]
-        case (urls, filename) if len(urls) > 1:
-            parser.exit(message="Specifying output with multiple URLs is not supported\n")
-        case (_, filename):
-            output = filename
 
     if not args.directory.exists():
         args.directory.mkdir()
     if not args.directory.is_dir():
         parser.exit(status=1, message=f"{args.directory} is not a directory")
 
-    for url, filename in zip(args.URLs, output):
-        archive = Archive(filename, find_images(url))
+    regexs = [args.url_name]
+    if args.number:
+        regexs.append(r"(\d+)")
+
+    for url in args.URLs:
+        archive = Archive(get_name(url, regexs, args.padding), find_images(url))
         archive.save(args.directory)
 
 
