@@ -1,24 +1,20 @@
 import re
 import io
 import requests
-from bs4 import BeautifulSoup
+from selectolax.parser import HTMLParser, Node
 from PIL import Image
 from zipfile import ZipFile
 from dataclasses import dataclass
 from argparse import ArgumentParser
 from pathlib import Path
+from time import sleep
+from typing import Iterable
 
 
 @dataclass
 class Img:
     filename: str
     url: str
-
-    def __post_init__(self):
-        if (m := re.search(r"(\d+)", self.filename)) is None:
-            raise ValueError("No number in id")
-        self.filename = f"{int(m.group(0)) + 1:03}.jpg"
-        self.url = self.url.strip()
 
     def download_jpeg(self) -> bytes:
         r = requests.get(self.url, stream=True)
@@ -31,18 +27,43 @@ class Img:
 @dataclass
 class Archive:
     filename: str
-    imgs: list[Img]
+    imgs: Iterable[Img]
 
     def save(self, directory: Path):
         with ZipFile(directory / self.filename, "w") as archive:
             for img in self.imgs:
-                archive.writestr(img.filename, img.download_jpeg())
+                sleep(0.5) # Throttle
+                if img.url:
+                    archive.writestr(img.filename, img.download_jpeg())
+                else:
+                    print(f"WARNING: no url ({img.url!r}) for {img.filename} in {directory / self.filename}")
+
+@dataclass
+class ImageConfig:
+    selector: str
+    number_attr: str
+    url_attr: str
+    number_pattern: re.Pattern
 
 
-def find_images(url: str) -> [Img]:
-    soup = BeautifulSoup(requests.get(url).text, "html.parser")
-    images = soup.find_all("img")
-    return [Img(image.get("id"), image.get("data-src")) for image in images]
+def img_from_node(node: Node, config: ImageConfig) -> Img | None:
+    number = node.attributes[config.number_attr]
+    url = node.attributes[config.url_attr]
+
+    if not url or not number:
+        print(f"Url or number for image is not present: url = {url!r}, number = {number!r}")
+        return None
+    if (match := re.search(config.number_pattern, number)) is None:
+        print(f"No number found for image {url!r} in {number!r}")
+        return None
+
+    return Img(match.group(0), url.strip())
+
+
+def find_images(url: str, config: ImageConfig) -> Iterable[Img]:
+    nodes = HTMLParser(requests.get(url).text).css(config.selector)
+    images = (img_from_node(node, config) for node in nodes)
+    return (image for image in images if image is not None)
 
 
 def sequential_search(data: str, regexs: list[str]) -> str | None:
@@ -58,7 +79,7 @@ def get_name(url: str, regexs: list[str], padding: int | None) -> str:
         raise ValueError(f"Regular Expression for name did not match for {url!r}")
     if padding:
         return f"{name:0>{padding}}.cbz"
-    return name
+    return f"{name}.cbz"
 
 
 def main():
@@ -70,7 +91,7 @@ def main():
     parser.add_argument("URLs", nargs='+', help="urls with images to download")
     parser.add_argument(
         "-u",
-        "--url-name",
+        "--url-name-pattern",
         nargs="?",
         default=r"^.+/([^/]+)/?$",
         help="a python regular expression with 1 capture group, that will be used to get filename for archive (default: filename in url)"
@@ -97,6 +118,26 @@ def main():
         action="store_true",
         help="find a number in name extracted by --url-name and use it"
     )
+    parser.add_argument(
+        "--image-selector",
+        default="img",
+        help="css selector to find correct images on web page",
+    )
+    parser.add_argument(
+        "--number-attr",
+        default="id",
+        help="HTML attribute of <img> tag contraining number of the image",
+    )
+    parser.add_argument(
+        "--url-attr",
+        default="src",
+        help="HTML attribute of <img> tag contraining url of the image",
+    )
+    parser.add_argument(
+        "--number-pattern",
+        default=r"(\d+)",
+        help="regular expression pattern to extract a number from attribute specified by --number_attr",
+    )
 
     args = parser.parse_args()
 
@@ -105,12 +146,19 @@ def main():
     if not args.directory.is_dir():
         parser.exit(status=1, message=f"{args.directory} is not a directory")
 
-    regexs = [args.url_name]
+    regexs = [args.url_name_pattern]
     if args.number:
         regexs.append(r"(\d+)")
 
+    config = ImageConfig(
+        selector=args.image_selector,
+        number_attr=args.number_attr,
+        url_attr=args.url_attr,
+        number_pattern=args.number_pattern,
+    )
+
     for url in args.URLs:
-        archive = Archive(get_name(url, regexs, args.padding), find_images(url))
+        archive = Archive(get_name(url, regexs, args.padding), find_images(url, config))
         archive.save(args.directory)
 
 
