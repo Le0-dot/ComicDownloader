@@ -3,7 +3,7 @@ import io
 import asyncio
 from pathlib import Path
 from zipfile import ZipFile
-from argparse import ArgumentParser
+from argparse import ArgumentParser, BooleanOptionalAction
 from dataclasses import dataclass, field
 from curl_cffi.requests import AsyncSession
 from selectolax.parser import HTMLParser, Node
@@ -115,35 +115,36 @@ def main():
         "-p",
         "--padding",
         nargs="?",
-        const=3,
+        default=3,
         type=int,
-        help="treat filename extracted with --url-name as a number and pad it to specified length (default length: 3)",
+        help="treat filename extracted with --url-name as a number and pad it to specified length (default: 3)",
     )
     parser.add_argument(
         "-n",
         "--number",
-        action="store_true",
-        help="find a number in name extracted by --url-name and use it",
+        action=BooleanOptionalAction,
+        default=True,
+        help="find a number in name extracted by --url-name and use it (default: --number)",
     )
     parser.add_argument(
         "--image-selector",
         default="img",
-        help="css selector to find correct images on web page",
+        help="css selector to find correct images on web page (default: img)",
     )
     parser.add_argument(
         "--number-attr",
         default="id",
-        help="HTML attribute of <img> tag contraining number of the image",
+        help="HTML attribute of <img> tag contraining number of the image (default: id)",
     )
     parser.add_argument(
         "--url-attr",
         default="src",
-        help="HTML attribute of <img> tag contraining url of the image",
+        help="HTML attribute of <img> tag contraining url of the image (default: src)",
     )
     parser.add_argument(
         "--number-pattern",
         default=r"(\d+)",
-        help="regular expression pattern to extract a number from attribute specified by --number_attr",
+        help="regular expression pattern to extract a number from attribute specified by --number_attr (default: ([0-9]+))",
     )
 
     args = parser.parse_args()
