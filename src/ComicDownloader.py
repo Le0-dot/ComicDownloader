@@ -1,7 +1,9 @@
 import re
 import io
+import sys
 import asyncio
 from pathlib import Path
+from types import TracebackType
 from zipfile import ZipFile
 from argparse import ArgumentParser, BooleanOptionalAction
 from dataclasses import dataclass, field
@@ -95,6 +97,14 @@ def get_name(url: str, regexs: list[re.Pattern], padding: int | None) -> str:
     return f"{name}.cbz"
 
 
+def custom_exception_hook(
+    exception_type: type[BaseException],
+    exception: BaseException,
+    traceback: TracebackType | None,
+) -> None:
+    print(f"{exception}")
+
+
 def main():
     parser = ArgumentParser(
         prog="ComicDownloader",
@@ -152,8 +162,14 @@ def main():
         default=r"(\d+)",
         help="regular expression pattern to extract a number from attribute specified by --number_attr (default: ([0-9]+))",
     )
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="show more detailed information"
+    )
 
     args = parser.parse_args()
+
+    if not args.verbose:
+        sys.excepthook = custom_exception_hook
 
     if not args.directory.exists():
         args.directory.mkdir()
