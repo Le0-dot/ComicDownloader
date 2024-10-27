@@ -16,9 +16,15 @@ class Img:
     url: str
 
     async def download_jpeg(self, session: AsyncSession) -> bytes:
-        response = await session.get(self.url, stream=True)
-        data = await response.acontent()
-        image = Image.open(io.BytesIO(data))
+        try:
+            response = await session.get(self.url, stream=True)
+            data = await response.acontent()
+            image = Image.open(io.BytesIO(data))
+        except Exception as e:
+            raise RuntimeError(
+                f"Encountered an error while downloading {self.url!r}"
+            ) from e
+
         buffer = io.BytesIO()
         image.save(buffer, format="jpeg")
         return buffer.getvalue()
