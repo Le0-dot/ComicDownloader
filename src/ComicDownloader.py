@@ -12,6 +12,18 @@ from selectolax.parser import HTMLParser, Node
 from PIL import Image
 
 
+class Cleared:
+    def __init__(self, *args) -> None:
+        self._data = "\n".join(args)
+        self._lines = self._data.count("\n") + 1 if args else 0
+
+    def __str__(self) -> str:
+        return self._data
+
+    def clear_str(self) -> str:
+        return "\033[1A\x1b[2K" * self._lines
+
+
 @dataclass
 class Img:
     filename: str
@@ -95,6 +107,14 @@ def get_name(url: str, regexs: list[re.Pattern], padding: int | None) -> str:
     if padding:
         return f"{name:0>{padding}}.cbz"
     return f"{name}.cbz"
+
+
+def bar(
+    completed: int, overall: int, width: int = 100, filler: str = "█", empty: str = " "
+) -> str:
+    step = 1 / overall * width
+    taken = int(completed * step)
+    return f"[{filler * taken}{empty * (width - taken)}]"
 
 
 def custom_exception_hook(
@@ -189,8 +209,11 @@ def main():
 
     async def actions():
         async with AsyncSession(impersonate="chrome") as session:
-            for url in args.URLs:
-                print(f"Processing {url!r}")
+            msg = Cleared()
+            for idx, url in enumerate(args.URLs):
+                print(msg.clear_str(), end="")
+                msg = Cleared(bar(idx, len(args.URLs)), f"Processing {url!r}")
+                print(msg)
                 images = await find_images(url, config, session)
                 archive = Archive(get_name(url, regexs, args.padding), images)
                 await archive.download(session)
