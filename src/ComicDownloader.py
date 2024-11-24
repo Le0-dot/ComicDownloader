@@ -2,6 +2,7 @@ import re
 import io
 import sys
 import asyncio
+from math import ceil
 from pathlib import Path
 from types import TracebackType
 from zipfile import ZipFile
@@ -113,7 +114,7 @@ def bar(
     completed: int, overall: int, width: int = 100, filler: str = "█", empty: str = " "
 ) -> str:
     step = 1 / overall * width
-    taken = int(completed * step)
+    taken = ceil(completed * step)
     return f"[{filler * taken}{empty * (width - taken)}]"
 
 
@@ -211,13 +212,14 @@ def main():
         async with AsyncSession(impersonate="chrome") as session:
             msg = Cleared()
             for idx, url in enumerate(args.URLs):
-                print(msg.clear_str(), end="")
                 msg = Cleared(bar(idx, len(args.URLs)), f"Processing {url!r}")
                 print(msg)
                 images = await find_images(url, config, session)
                 archive = Archive(get_name(url, regexs, args.padding), images)
                 await archive.download(session)
                 archive.save(args.directory)
+                print(msg.clear_str(), end="")
+            print(bar(len(args.URLs), len(args.URLs)))
 
     asyncio.run(actions())
 
