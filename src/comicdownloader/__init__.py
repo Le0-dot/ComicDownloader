@@ -70,13 +70,16 @@ class ImageConfig:
 
 
 def img_from_node(node: Node, config: ImageConfig) -> Img | None:
-    number = node.attributes[config.number_attr]
-    url = node.attributes[config.url_attr]
+    number = node.attributes.get(config.number_attr)
+    url = node.attributes.get(config.url_attr)
 
     if not url or not number:
         print(
             f"Url or number for image is not present: url = {url!r}, number = {number!r}"
         )
+        return None
+    if url.endswith("png"):
+        print(f"Image with url = {url!r} will be dropped")
         return None
     if (match := re.search(config.number_pattern, number)) is None:
         print(f"No number found for image {url!r} in {number!r}")
@@ -215,6 +218,8 @@ def main():
                 msg = Cleared(bar(idx, len(args.URLs)), f"Processing {url!r}")
                 print(msg)
                 images = await find_images(url, config, session)
+                if len(images) == 0:
+                    raise RuntimeError(f"No images found for {url!r}")
                 archive = Archive(get_name(url, regexs, args.padding), images)
                 await archive.download(session)
                 archive.save(args.directory)
