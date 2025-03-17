@@ -13,8 +13,8 @@ source venv/bin/activate # For Linux
 [More information](https://docs.python.org/3/tutorial/venv.html)
 
 
-Once virtual environmnet is setup run `pip install -r requirements.txt` to install dependencies.
+Once virtual environmnet is setup run `pip install .` to install dependencies.
 
 ## Running
-To run, use `python ComicDownloader <URL>`.
-For more information, use `python ComicDownloader --help`.
+To run, use `comicdownloader <URL>`.
+For more information, use `comicdownloader --help`.
